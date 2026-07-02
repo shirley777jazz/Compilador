@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laboratorio de Compiladores · Fases en Java</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f17;
+    --panel:#111826;
+    --panel-alt:#161f30;
+    --border:#233047;
+    --border-soft:#1b2536;
+    --text:#d7e0ee;
+    --text-dim:#7c8aa3;
+    --text-faint:#4c5872;
+    --purple:#c58af2;
+    --teal:#4ec9b0;
+    --blue:#6fb3ff;
+    --orange:#f0a675;
+    --green:#8fd19e;
+    --yellow:#e8c15c;
+    --red:#f27272;
+    --mono:'JetBrains Mono', monospace;
+    --sans:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(111,179,255,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 0%, rgba(197,138,242,0.08), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  ::selection{background:rgba(78,201,176,0.35);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 100px;}
+
+  /* HEADER */
+  header.top{margin-bottom:36px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--teal);display:flex;align-items:center;gap:8px;margin-bottom:14px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal);}
+  h1{
+    font-size:clamp(28px,4vw,42px);margin:0 0 10px;font-weight:800;letter-spacing:-0.02em;
+    line-height:1.1;
+  }
+  h1 .accent{color:var(--teal);}
+  header.top p{color:var(--text-dim);max-width:640px;line-height:1.55;margin:0;font-size:15px;}
+
+  /* PIPELINE */
+  .pipeline{
+    display:flex;align-items:stretch;gap:0;margin:34px 0 8px;
+    background:var(--panel);border:1px solid var(--border);border-radius:14px;
+    padding:6px;overflow-x:auto;
+  }
+  .pipe-node{
+    flex:1 1 0;min-width:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:6px;padding:16px 10px;border-radius:10px;cursor:pointer;position:relative;
+    border:1px solid transparent;transition:background .15s ease,border-color .15s ease;
+    text-align:center;
+  }
+  .pipe-node.end{cursor:default;}
+  .pipe-node .num{font-family:var(--mono);font-size:11px;color:var(--text-faint);}
+  .pipe-node .label{font-size:13px;font-weight:600;color:var(--text-dim);letter-spacing:.01em;}
+  .pipe-node:not(.end):hover{background:var(--panel-alt);}
+  .pipe-node.active{background:rgba(78,201,176,0.09);border-color:rgba(78,201,176,0.4);}
+  .pipe-node.active .label{color:var(--teal);}
+  .pipe-node.active .num{color:var(--teal);}
+  .pipe-arrow{
+    display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:14px;
+    padding:0 2px;flex:0 0 auto;
+  }
+
+  /* TABS PANEL */
+  .stage{
+    display:none;
+    margin-top:28px;
+    animation:fadein .35s ease;
+  }
+  .stage.active{display:block;}
+  @keyframes fadein{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+  .stage-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:6px;}
+  .stage-title{font-size:22px;font-weight:800;letter-spacing:-0.01em;}
+  .stage-sub{color:var(--text-dim);font-size:13.5px;margin:2px 0 22px;line-height:1.5;max-width:720px;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+
+  .card{
+    background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:22px;
+  }
+  .card h3{
+    margin:0 0 14px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);
+    display:flex;align-items:center;gap:8px;font-weight:700;
+  }
+  .card h3 .chip{
+    width:18px;height:18px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:10px;font-weight:700;
+  }
+
+  label{display:block;font-size:12.5px;color:var(--text-dim);margin:14px 0 6px;font-weight:600;}
+  label:first-of-type{margin-top:0;}
+  input[type=text], input[type=number], textarea{
+    width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:11px 12px;font-family:var(--mono);font-size:13.5px;
+    outline:none;transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  textarea{resize:vertical;min-height:96px;line-height:1.6;}
+  input::placeholder, textarea::placeholder{color:var(--text-faint);}
+  input:focus, textarea:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(78,201,176,0.13);}
+  input[type=range]{accent-color:var(--teal);}
+
+  .btn{
+    margin-top:18px;background:var(--teal);color:#06110d;border:none;border-radius:8px;
+    padding:11px 18px;font-family:var(--sans);font-weight:700;font-size:13.5px;cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease; letter-spacing:.01em;
+  }
+  .btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(78,201,176,0.25);}
+  .btn:active{transform:translateY(0);}
+  .btn:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+  .btn-ghost{
+    background:transparent;border:1px solid var(--border);color:var(--text-dim);margin-left:8px;
+  }
+  .btn-ghost:hover{box-shadow:none;border-color:var(--text-faint);color:var(--text);}
+
+  .err{
+    margin-top:14px;padding:10px 12px;border-radius:8px;background:rgba(242,114,114,0.1);
+    border:1px solid rgba(242,114,114,0.35);color:var(--red);font-family:var(--mono);font-size:12.5px;
+    display:none;
+  }
+  .err.show{display:block;}
+
+  /* OUTPUT / CONSOLE */
+  .console{
+    background:#080b12;border:1px solid var(--border-soft);border-radius:10px;
+    padding:16px;font-family:var(--mono);font-size:12.8px;line-height:1.75;color:var(--text-dim);
+    min-height:80px;white-space:pre-wrap;overflow-x:auto;
+  }
+  .console .ln{color:var(--text-faint);display:inline-block;width:22px;user-select:none;}
+  .placeholder-msg{color:var(--text-faint);font-style:normal;}
+
+  table.data{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.8px;}
+  table.data th{
+    text-align:left;color:var(--text-faint);font-weight:600;text-transform:uppercase;font-size:10.5px;
+    letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--border);
+  }
+  table.data td{padding:9px 10px;border-bottom:1px solid var(--border-soft);color:var(--text);}
+  table.data tr:last-child td{border-bottom:none;}
+  .tag{
+    display:inline-block;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:700;
+  }
+  .tag-int{background:rgba(143,209,158,0.15);color:var(--green);}
+  .tag-double{background:rgba(111,179,255,0.15);color:var(--blue);}
+  .tag-string{background:rgba(240,166,117,0.15);color:var(--orange);}
+  .tag-boolean{background:rgba(197,138,242,0.15);color:var(--purple);}
+  .tag-char{background:rgba(232,193,92,0.15);color:var(--yellow);}
+  .tag-err{background:rgba(242,114,114,0.15);color:var(--red);}
+
+  /* TREE */
+  .tree{font-family:var(--mono);font-size:13px;}
+  .tnode{margin-left:18px;padding-left:14px;border-left:1px dashed var(--border);position:relative;}
+  .tnode:before{content:"";position:absolute;left:-1px;top:14px;width:14px;border-top:1px dashed var(--border);}
+  .tree > .tnode{margin-left:0;padding-left:0;border-left:none;}
+  .tree > .tnode:before{display:none;}
+  .tbox{
+    display:inline-flex;align-items:center;gap:6px;background:var(--panel-alt);border:1px solid var(--border);
+    border-radius:7px;padding:4px 9px;margin:3px 0;
+  }
+  .tbox.op{color:var(--purple);border-color:rgba(197,138,242,0.35);}
+  .tbox.id{color:var(--blue);border-color:rgba(111,179,255,0.35);}
+  .tbox.num{color:var(--green);border-color:rgba(143,209,158,0.35);}
+
+  /* MEMORY */
+  .mem-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px;}
+  @media (max-width:640px){.mem-layout{grid-template-columns:1fr;}}
+  .mem-col h4{
+    font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);
+    margin:0 0 10px;font-weight:700;
+  }
+  .stackzone{
+    min-height:220px;background:#080b12;border:1px solid var(--border-soft);border-radius:10px;
+    padding:10px;display:flex;flex-direction:column-reverse;gap:6px;
+  }
+  .frame{
+    font-family:var(--mono);font-size:12.5px;padding:8px 10px;border-radius:7px;
+    background:rgba(111,179,255,0.1);border:1px solid rgba(111,179,255,0.35);color:var(--blue);
+    animation:pop-in .25s ease;
+  }
+  .frame.dead{opacity:0.25;text-decoration:line-through;}
+  @keyframes pop-in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .heapzone{
+    min-height:220px;background:#080b12;border:1px solid var(--border-soft);border-radius:10px;
+    padding:10px;display:flex;flex-direction:column;gap:6px;
+  }
+  .heapobj{
+    font-family:var(--mono);font-size:12.5px;padding:8px 10px;border-radius:7px;
+    background:rgba(232,193,92,0.1);border:1px solid rgba(232,193,92,0.35);color:var(--yellow);
+    animation:pop-in .25s ease;
+  }
+  .heapobj.freed{opacity:0.3;color:var(--text-faint);border-color:var(--border);background:transparent;}
+
+  footer{margin-top:60px;color:var(--text-faint);font-size:12px;text-align:center;font-family:var(--mono);}
+
+  @media (prefers-reduced-motion: reduce){
+    .stage, .frame, .heapobj{animation:none !important;}
+    .btn{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow"><span class="dot"></span>compilador · fases en java</div>
+    <h1>Fases de un <span class="accent">Compilador</span></h1>
+    <p>Cuatro fases de un compilador, explicadas con ejemplos ejecutables en Java. Ingresa tus propios datos en cada fase y observa el proceso interno paso a paso: tokens, árboles, tablas, código intermedio y el ciclo de vida de la memoria en tiempo de ejecución.</p>
+  </header>
+
+  <nav class="pipeline" id="pipeline">
+    <div class="pipe-node end"><div class="num">·</div><div class="label">Código fuente</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" data-stage="semantico"><div class="num">01</div><div class="label">Análisis semántico</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" data-stage="tabla"><div class="num">02</div><div class="label">Tabla de tipos y símbolos</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" data-stage="codegen"><div class="num">03</div><div class="label">Generación de código</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node" data-stage="memoria"><div class="num">04</div><div class="label">Gestión de memoria</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-node end"><div class="num">·</div><div class="label">Código objeto</div></div>
+  </nav>
+
+  <!-- ===================== STAGE 1: ANALISIS SEMANTICO ===================== -->
+  <section class="stage" id="stage-semantico">
+    <div class="stage-head">
+      <div>
+        <div class="stage-title">01 · Análisis semántico</div>
+      </div>
+    </div>
+    <p class="stage-sub">Declara variables y luego una línea de uso (<code>tipo nombre = valor;</code> seguido de <code>destino = expresión;</code>). El analizador construye la tabla de símbolos, verifica que cada identificador usado esté declarado y comprueba la compatibilidad de tipos en cada operación, tal como lo haría la fase semántica de un compilador antes de generar código.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(78,201,176,.15);color:var(--teal)">In</span>Entrada</h3>
+        <label for="sem-input">Declaraciones y expresión a validar</label>
+        <textarea id="sem-input" placeholder="int edad = 21;&#10;double promedio = 15.5;&#10;boolean activo = true;&#10;resultado = edad + promedio;"></textarea>
+        <button class="btn" onclick="runSemantic()">Analizar semántica</button>
+        <div class="err" id="sem-err"></div>
+      </div>
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(111,179,255,.15);color:var(--blue)">01</span>Tabla de símbolos (ámbito local)</h3>
+        <div id="sem-symtab" class="console"><span class="placeholder-msg">Las variables declaradas aparecerán aquí con su tipo.</span></div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:20px;">
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(197,138,242,.15);color:var(--purple)">02</span>Verificaciones semánticas</h3>
+        <div id="sem-checks" class="console"><span class="placeholder-msg">Se listará, paso a paso, cada comprobación de declaración y de tipo.</span></div>
+      </div>
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(240,166,117,.15);color:var(--orange)">03</span>Árbol anotado con tipos</h3>
+        <div id="sem-tree" class="console"><span class="placeholder-msg">Cada nodo del árbol se etiquetará con el tipo que infiere el compilador.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== STAGE 2: TABLA DE TIPOS Y SIMBOLOS ===================== -->
+  <section class="stage" id="stage-tabla">
+    <div class="stage-head">
+      <div class="stage-title">02 · Tabla de tipos y símbolos</div>
+    </div>
+    <p class="stage-sub">Declara variables como en Java: <code>tipo nombre = valor;</code>, una por línea. Se validará el tipo declarado contra el valor asignado y se construirán la tabla de tipos (reglas del lenguaje) y la tabla de símbolos (instancias concretas).</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(78,201,176,.15);color:var(--teal)">In</span>Entrada</h3>
+        <label for="sym-input">Declaraciones (una por línea)</label>
+        <textarea id="sym-input" placeholder="int edad = 21;&#10;double promedio = 15.75;&#10;String nombre = &quot;Juana&quot;;&#10;boolean activo = true;"></textarea>
+        <button class="btn" onclick="runSymbols()">Construir tablas</button>
+        <div class="err" id="sym-err"></div>
+      </div>
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(111,179,255,.15);color:var(--blue)">01</span>Tabla de tipos</h3>
+        <div id="type-table"><span class="placeholder-msg console" style="display:block;">Se listarán solo los tipos usados en tu entrada.</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h3><span class="chip" style="background:rgba(197,138,242,.15);color:var(--purple)">02</span>Tabla de símbolos</h3>
+      <div id="symbol-table"><span class="placeholder-msg console" style="display:block;">Cada identificador declarado aparecerá con su tipo, valor y dirección simulada.</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== STAGE 3: GENERACION DE CODIGO ===================== -->
+  <section class="stage" id="stage-codegen">
+    <div class="stage-head">
+      <div class="stage-title">03 · Generación de código</div>
+    </div>
+    <p class="stage-sub">Reutilizando el mismo árbol sintáctico, cada operación binaria se traduce a código de tres direcciones (variables temporales) y luego a un pseudo-ensamblador con registros, tal como lo haría el backend de un compilador.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(78,201,176,.15);color:var(--teal)">In</span>Entrada</h3>
+        <label for="gen-input">Expresión aritmética</label>
+        <input type="text" id="gen-input" placeholder="total = ( precio + iva ) * cantidad">
+        <button class="btn" onclick="runCodegen()">Generar código</button>
+        <div class="err" id="gen-err"></div>
+      </div>
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(111,179,255,.15);color:var(--blue)">01</span>Código de tres direcciones</h3>
+        <div id="gen-tac" class="console"><span class="placeholder-msg">t1 = ...  t2 = ...</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h3><span class="chip" style="background:rgba(240,166,117,.15);color:var(--orange)">02</span>Pseudo-ensamblador (registros)</h3>
+      <div id="gen-asm" class="console"><span class="placeholder-msg">LOAD, ADD, MUL, STORE por cada temporal generado.</span></div>
+    </div>
+  </section>
+
+  <!-- ===================== STAGE 4: GESTION DE MEMORIA ===================== -->
+  <section class="stage" id="stage-memoria">
+    <div class="stage-head">
+      <div class="stage-title">04 · Gestión de memoria</div>
+    </div>
+    <p class="stage-sub">Simula llamadas recursivas apilándose en tiempo de ejecución, igual que <code>ejecutarFase()</code> en Java: cada llamada empuja un registro de activación a la <b>pila</b> y crea un objeto en el <b>heap</b>; al retornar, el registro se destruye (POP) y el objeto queda disponible para el recolector de basura.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(78,201,176,.15);color:var(--teal)">In</span>Entrada</h3>
+        <label for="mem-input">Número de llamadas recursivas a apilar (1–5)</label>
+        <input type="number" id="mem-input" min="1" max="5" placeholder="3">
+        <button class="btn" onclick="runMemory()">Simular</button>
+        <button class="btn btn-ghost" onclick="resetMemory()">Reiniciar</button>
+        <div class="err" id="mem-err"></div>
+      </div>
+      <div class="card">
+        <h3><span class="chip" style="background:rgba(232,193,92,.15);color:var(--yellow)">Log</span>Trazado en consola</h3>
+        <div id="mem-log" class="console" style="max-height:260px;overflow-y:auto;"><span class="placeholder-msg">PUSH / POP y creación de objetos se listarán aquí en orden.</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h3><span class="chip" style="background:rgba(111,179,255,.15);color:var(--blue)">Runtime</span>Estado de la pila y el heap</h3>
+      <div class="mem-layout">
+        <div class="mem-col">
+          <h4>Pila (Stack · LIFO)</h4>
+          <div class="stackzone" id="mem-stack"></div>
+        </div>
+        <div class="mem-col">
+          <h4>Montículo (Heap)</h4>
+          <div class="heapzone" id="mem-heap"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>análisis semántico · tabla de tipos y símbolos · generación de código · gestión de memoria</footer>
+</div>
+
+<script>
+/* ---------------------------------------------------------- */
+/* NAVIGATION                                                  */
+/* ---------------------------------------------------------- */
+const stages = ['semantico','tabla','codegen','memoria'];
+function showStage(name){
+  stages.forEach(s=>{
+    document.getElementById('stage-'+s).classList.toggle('active', s===name);
+  });
+  document.querySelectorAll('.pipe-node[data-stage]').forEach(n=>{
+    n.classList.toggle('active', n.dataset.stage===name);
+  });
+}
+document.querySelectorAll('.pipe-node[data-stage]').forEach(n=>{
+  n.addEventListener('click', ()=>showStage(n.dataset.stage));
+});
+showStage('semantico');
+
+/* ---------------------------------------------------------- */
+/* SHARED: TOKENIZER + RECURSIVE-DESCENT PARSER FOR EXPRESSIONS */
+/* Grammar:  E -> E (+|-) T | T                                 */
+/*           T -> T (*|/) F | F                                 */
+/*           F -> ( E ) | id | num                              */
+/* ---------------------------------------------------------- */
+function tokenizeExpr(src){
+  const re = /\s*([A-Za-z_][A-Za-z0-9_]*|\d+\.\d+|\d+|[+\-*/()=])\s*/g;
+  const tokens = [];
+  let m, idx = 0, cursor = 0;
+  const clean = src.trim();
+  if(!clean) return tokens;
+  while((m = re.exec(clean)) !== null){
+    if(m.index !== cursor) throw new Error('Carácter no reconocido cerca de: "'+clean.slice(cursor, m.index+3)+'"');
+    cursor = re.lastIndex;
+    const val = m[1];
+    let type;
+    if(/^[A-Za-z_]/.test(val)) type='id';
+    else if(/^\d/.test(val)) type='num';
+    else if(val==='(') type='lparen';
+    else if(val===')') type='rparen';
+    else if(val==='=') type='assign';
+    else type='op';
+    tokens.push({type, value: val});
+  }
+  if(cursor !== clean.length) throw new Error('Carácter no reconocido al final de la expresión.');
+  return tokens;
+}
+
+function parseExpression(tokens){
+  let pos = 0;
+  function peek(){ return tokens[pos]; }
+  function eat(type){
+    const t = tokens[pos];
+    if(!t || (type && t.type!==type)) throw new Error('Se esperaba '+type+' pero se encontró '+(t?t.value:'fin de expresión'));
+    pos++; return t;
+  }
+  function parseE(){
+    let node = parseT();
+    while(peek() && peek().type==='op' && (peek().value==='+'||peek().value==='-')){
+      const op = eat('op').value;
+      const right = parseT();
+      node = {type:'bin', rule:'E → E '+op+' T', op, left:node, right};
+    }
+    return node;
+  }
+  function parseT(){
+    let node = parseF();
+    while(peek() && peek().type==='op' && (peek().value==='*'||peek().value==='/')){
+      const op = eat('op').value;
+      const right = parseF();
+      node = {type:'bin', rule:'T → T '+op+' F', op, left:node, right};
+    }
+    return node;
+  }
+  function parseF(){
+    const t = peek();
+    if(!t) throw new Error('Expresión incompleta.');
+    if(t.type==='lparen'){
+      eat('lparen');
+      const node = parseE();
+      eat('rparen');
+      return {type:'group', rule:'F → ( E )', inner:node};
+    }
+    if(t.type==='id'){ eat('id'); return {type:'id', name:t.value, rule:'F → id'}; }
+    if(t.type==='num'){ eat('num'); return {type:'num', value:t.value, rule:'F → num'}; }
+    throw new Error('Token inesperado: "'+t.value+'"');
+  }
+  const tree = parseE();
+  if(pos !== tokens.length) throw new Error('Sobran símbolos después de la expresión: "'+tokens[pos].value+'"');
+  return tree;
+}
+
+/* strip an optional leading "name = " assignment, return {lhs, exprTokens} */
+function splitAssignment(tokens){
+  if(tokens.length>=2 && tokens[0].type==='id' && tokens[1].type==='assign'){
+    return {lhs: tokens[0].value, rest: tokens.slice(2)};
+  }
+  return {lhs:null, rest:tokens};
+}
+
+/* ---------------------------------------------------------- */
+/* STAGE 1: SEMANTIC ANALYSIS                                   */
+/* ---------------------------------------------------------- */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+const NUMERIC_TYPES = ['int','double','float'];
+const TYPE_RANK = {int:1, float:2, double:3};
+
+function widerNumeric(a,b){
+  return (TYPE_RANK[a] >= TYPE_RANK[b]) ? a : b;
+}
+
+/* infer type of a node, pushing semantic checks/errors as it goes */
+function inferSemType(node, symtab, checks, indent){
+  const pad = '  '.repeat(indent);
+  if(node.type==='group') return inferSemType(node.inner, symtab, checks, indent);
+
+  if(node.type==='num'){
+    const t = /\./.test(node.value) ? 'double' : 'int';
+    node.inferredType = t;
+    checks.push(pad+'· literal '+node.value+'  →  tipo '+t);
+    return t;
+  }
+
+  if(node.type==='id'){
+    if(!symtab[node.name]){
+      checks.push(pad+'✗ variable "'+node.name+'" no declarada en este ámbito');
+      node.inferredType = 'error';
+      return 'error';
+    }
+    const t = symtab[node.name].type;
+    node.inferredType = t;
+    checks.push(pad+'✓ "'+node.name+'" declarada como '+t+'  →  uso válido');
+    return t;
+  }
+
+  if(node.type==='bin'){
+    const lt = inferSemType(node.left, symtab, checks, indent+1);
+    const rt = inferSemType(node.right, symtab, checks, indent+1);
+    if(lt==='error' || rt==='error'){ node.inferredType='error'; return 'error'; }
+
+    let result;
+    if(lt==='String' || rt==='String'){
+      if(node.op==='+' && lt==='String' && rt==='String'){
+        result='String';
+        checks.push(pad+'✓ '+lt+' '+node.op+' '+rt+'  →  concatenación válida (String)');
+      } else {
+        checks.push(pad+'✗ tipos incompatibles: '+lt+' '+node.op+' '+rt+' (String solo admite "+")');
+        result='error';
+      }
+    } else if(lt==='boolean' || rt==='boolean'){
+      checks.push(pad+'✗ el operador "'+node.op+'" no es aplicable a boolean ('+lt+' '+node.op+' '+rt+')');
+      result='error';
+    } else if(NUMERIC_TYPES.includes(lt) && NUMERIC_TYPES.includes(rt)){
+      result = widerNumeric(lt, rt);
+      if(lt!==rt){
+        checks.push(pad+'✓ '+lt+' '+node.op+' '+rt+'  →  promoción implícita a '+result);
+      } else {
+        checks.push(pad+'✓ '+lt+' '+node.op+' '+rt+'  →  '+result);
+      }
+    } else {
+      checks.push(pad+'✗ tipos incompatibles: '+lt+' '+node.op+' '+rt);
+      result='error';
+    }
+    node.inferredType = result;
+    return result;
+  }
+  return 'error';
+}
+
+function renderSemTree(node){
+  const tclass = t => NUMERIC_TYPES.includes(t) ? 'num' : (t==='error' ? 'op' : 'id');
+  if(node.type==='group') return renderSemTree(node.inner);
+  if(node.type==='id'){
+    const style = node.inferredType==='error' ? 'style="color:var(--red);border-color:rgba(242,114,114,.4)"' : '';
+    return '<div class="tnode"><span class="tbox id" '+style+'>'+esc(node.name)+' : '+node.inferredType+'</span></div>';
+  }
+  if(node.type==='num'){
+    return '<div class="tnode"><span class="tbox num">'+esc(node.value)+' : '+node.inferredType+'</span></div>';
+  }
+  if(node.type==='bin'){
+    const style = node.inferredType==='error' ? 'style="color:var(--red);border-color:rgba(242,114,114,.4)"' : '';
+    return '<div class="tnode"><span class="tbox op" '+style+'>'+esc(node.op)+' : '+node.inferredType+'</span>'
+      + renderSemTree(node.left) + renderSemTree(node.right) + '</div>';
+  }
+  return '';
+}
+
+function runSemantic(){
+  const errBox = document.getElementById('sem-err');
+  errBox.classList.remove('show'); errBox.textContent='';
+  const raw = document.getElementById('sem-input').value ||
+    'int edad = 21;\ndouble promedio = 15.5;\nboolean activo = true;\nresultado = edad + promedio;';
+
+  const declRe = /^(int|double|float|String|boolean|char)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;$/;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+
+  const symtab = {};
+  const declOrder = [];
+  const exprLines = [];
+  const parseErrors = [];
+
+  lines.forEach(line=>{
+    const m = line.match(declRe);
+    if(m){
+      const [, type, name, value] = m;
+      symtab[name] = {type, value, addr:'0x'+(0x2000+declOrder.length*8).toString(16).toUpperCase()};
+      declOrder.push(name);
+    } else {
+      exprLines.push(line);
+    }
+  });
+
+  if(declOrder.length===0 && exprLines.length===0){
+    parseErrors.push('No se reconoció ninguna declaración ni expresión.');
+  }
+
+  // symbol table (declarations only)
+  if(declOrder.length){
+    let symHtml = '<table class="data"><thead><tr><th>Nombre</th><th>Tipo</th><th>Ámbito</th><th>Dirección</th></tr></thead><tbody>';
+    declOrder.forEach(name=>{
+      const s = symtab[name];
+      symHtml += '<tr><td>'+esc(name)+'</td><td><span class="tag tag-'+s.type.toLowerCase()+'">'+s.type+'</span></td><td>local</td><td>'+s.addr+'</td></tr>';
+    });
+    symHtml += '</tbody></table>';
+    document.getElementById('sem-symtab').innerHTML = symHtml;
+  } else {
+    document.getElementById('sem-symtab').innerHTML = '<span class="placeholder-msg">No hay declaraciones — solo se evaluará la expresión.</span>';
+  }
+
+  const allChecks = [];
+  const treeBlocks = [];
+
+  declOrder.forEach(name=>{
+    const s = symtab[name];
+    const validLiteral = (
+      (s.type==='int' && /^-?\d+$/.test(s.value)) ||
+      ((s.type==='double'||s.type==='float') && /^-?\d+(\.\d+)?$/.test(s.value)) ||
+      (s.type==='String' && /^".*"$/.test(s.value)) ||
+      (s.type==='boolean' && /^(true|false)$/.test(s.value)) ||
+      (s.type==='char' && /^'.'$/.test(s.value))
+    );
+    allChecks.push((validLiteral?'✓':'✗')+' declaración: '+s.type+' '+name+' = '+s.value+
+      (validLiteral ? '  →  literal compatible con '+s.type : '  →  literal incompatible con '+s.type));
+  });
+
+  let hadExprError = false;
+
+  exprLines.forEach(line=>{
+    const clean = line.replace(/;$/,'');
+    try{
+      const tokens = tokenizeExpr(clean);
+      const {lhs, rest} = splitAssignment(tokens);
+      if(rest.length===0) throw new Error('expresión vacía en "'+line+'"');
+      const ast = parseExpression(rest);
+
+      allChecks.push('— evaluando: '+clean);
+      const checks = [];
+      const resultType = inferSemType(ast, symtab, checks, 0);
+      allChecks.push(...checks);
+
+      if(lhs){
+        if(symtab[lhs]){
+          const destType = symtab[lhs].type;
+          if(resultType==='error'){
+            allChecks.push('✗ no se puede verificar la asignación a "'+lhs+'" por errores previos');
+            hadExprError = true;
+          } else if(destType===resultType || (NUMERIC_TYPES.includes(destType) && NUMERIC_TYPES.includes(resultType) && TYPE_RANK[destType] >= TYPE_RANK[resultType])){
+            allChecks.push('✓ asignación válida: '+lhs+' ('+destType+') ← resultado '+resultType);
+          } else {
+            allChecks.push('✗ asignación inválida: no se puede asignar '+resultType+' a "'+lhs+'" declarada como '+destType);
+            hadExprError = true;
+          }
+        } else {
+          allChecks.push('✓ "'+lhs+'" se infiere como variable nueva de tipo '+resultType);
+        }
+      }
+      if(resultType==='error') hadExprError = true;
+
+      treeBlocks.push('<div class="tree" style="margin-bottom:14px;">'+
+        (lhs ? '<div class="tnode"><span class="tbox id" style="color:var(--yellow);border-color:rgba(232,193,92,.35)">'+esc(lhs)+' ←</span>'+renderSemTree(ast)+'</div>' : renderSemTree(ast))
+        +'</div>');
+    }catch(e){
+      allChecks.push('✗ error de análisis en "'+line+'": '+e.message);
+      hadExprError = true;
+    }
+  });
+
+  document.getElementById('sem-checks').textContent = allChecks.join('\n');
+  document.getElementById('sem-tree').innerHTML = treeBlocks.length
+    ? treeBlocks.join('')
+    : '<span class="placeholder-msg">Agrega una línea de expresión (ej. resultado = edad + promedio;) para ver el árbol anotado.</span>';
+
+  if(parseErrors.length || hadExprError){
+    errBox.innerHTML = parseErrors.concat(hadExprError ? ['Se encontraron incompatibilidades de tipo — revisa las verificaciones semánticas.'] : []).map(e=>'✕ '+esc(e)).join('<br>');
+    errBox.classList.add('show');
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* STAGE 2: TYPE & SYMBOL TABLE                                 */
+/* ---------------------------------------------------------- */
+const TYPE_DESCR = {
+  int: 'Números enteros (32 bits)',
+  double: 'Números decimales de doble precisión',
+  float: 'Números decimales de precisión simple',
+  String: 'Cadena de texto (objeto inmutable)',
+  boolean: 'Valor lógico true / false',
+  char: 'Un único carácter Unicode'
+};
+
+function validateValue(type, value){
+  const v = value.trim();
+  switch(type){
+    case 'int': return /^-?\d+$/.test(v);
+    case 'double': case 'float': return /^-?\d+(\.\d+)?$/.test(v);
+    case 'String': return /^".*"$/.test(v);
+    case 'boolean': return v==='true' || v==='false';
+    case 'char': return /^'.'$/.test(v);
+    default: return false;
+  }
+}
+
+function runSymbols(){
+  const errBox = document.getElementById('sym-err');
+  errBox.classList.remove('show'); errBox.textContent='';
+  const raw = document.getElementById('sym-input').value ||
+    'int edad = 21;\ndouble promedio = 15.75;\nString nombre = "Shirler";';
+
+  const lineRe = /(int|double|float|String|boolean|char)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*;/g;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  const symbols = [];
+  const usedTypes = new Set();
+  const errors = [];
+
+  lines.forEach((line, i)=>{
+    lineRe.lastIndex = 0;
+    const m = lineRe.exec(line);
+    if(!m){
+      errors.push('Línea '+(i+1)+': no coincide con el formato "tipo nombre = valor;"');
+      return;
+    }
+    const [, type, name, value] = m;
+    usedTypes.add(type);
+    const valid = validateValue(type, value);
+    if(!valid) errors.push('Línea '+(i+1)+': el valor '+value+' no es válido para el tipo '+type);
+    symbols.push({name, type, value, valid, addr: '0x' + (0x1000 + i*8).toString(16).toUpperCase()});
+  });
+
+  if(errors.length){
+    errBox.innerHTML = errors.map(e=>'✕ '+esc(e)).join('<br>');
+    errBox.classList.add('show');
+  }
+
+  if(usedTypes.size===0 && symbols.length===0){
+    document.getElementById('type-table').innerHTML = '<span class="placeholder-msg console" style="display:block;">Ninguna declaración válida encontrada.</span>';
+    document.getElementById('symbol-table').innerHTML = '<span class="placeholder-msg console" style="display:block;">Ninguna declaración válida encontrada.</span>';
+    return;
+  }
+
+  let typeHtml = '<table class="data"><thead><tr><th>Tipo</th><th>Descripción</th></tr></thead><tbody>';
+  [...usedTypes].forEach(t=>{
+    typeHtml += '<tr><td><span class="tag tag-'+t.toLowerCase()+'">'+t+'</span></td><td>'+TYPE_DESCR[t]+'</td></tr>';
+  });
+  typeHtml += '</tbody></table>';
+  document.getElementById('type-table').innerHTML = typeHtml;
+
+  let symHtml = '<table class="data"><thead><tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Dirección</th><th>Estado</th></tr></thead><tbody>';
+  symbols.forEach(s=>{
+    symHtml += '<tr><td>'+esc(s.name)+'</td><td><span class="tag tag-'+s.type.toLowerCase()+'">'+s.type+'</span></td><td>'+esc(s.value)+'</td><td>'+s.addr+'</td><td>'+
+      (s.valid ? '<span class="tag" style="background:rgba(143,209,158,.15);color:var(--green)">válido</span>' : '<span class="tag tag-err">tipo incompatible</span>')
+      +'</td></tr>';
+  });
+  symHtml += '</tbody></table>';
+  document.getElementById('symbol-table').innerHTML = symHtml;
+}
+
+/* ---------------------------------------------------------- */
+/* STAGE 3: CODE GENERATION                                     */
+/* ---------------------------------------------------------- */
+function runCodegen(){
+  const errBox = document.getElementById('gen-err');
+  errBox.classList.remove('show'); errBox.textContent='';
+  const raw = document.getElementById('gen-input').value || 'total = ( precio + iva ) * cantidad';
+  try{
+    const tokens = tokenizeExpr(raw);
+    if(tokens.length===0) throw new Error('Ingresa una expresión.');
+    const {lhs, rest} = splitAssignment(tokens);
+    const ast = parseExpression(rest);
+
+    let counter = 1;
+    const tac = [];
+    function gen(node){
+      if(node.type==='group') return gen(node.inner);
+      if(node.type==='id') return node.name;
+      if(node.type==='num') return node.value;
+      const l = gen(node.left);
+      const r = gen(node.right);
+      const t = 't'+(counter++);
+      tac.push(t+' = '+l+' '+node.op+' '+r);
+      return t;
+    }
+    const result = gen(ast);
+    if(lhs) tac.push(lhs+' = '+result);
+
+    document.getElementById('gen-tac').textContent =
+      tac.map((l,i)=>'  ('+(i+1)+')  '+l).join('\n');
+
+    // pseudo assembly
+    const regs = ['R1','R2','R3','R4','R5','R6','R7','R8'];
+    let ri = 0;
+    const asm = [];
+    const loaded = {};
+    function regFor(operand){
+      if(loaded[operand] !== undefined) return loaded[operand];
+      const r = regs[ri++ % regs.length];
+      if(/^t\d+$/.test(operand) || /^[A-Za-z_]/.test(operand)){
+        asm.push('LOAD  '+r+', '+operand);
+      } else {
+        asm.push('MOVI  '+r+', #'+operand);
+      }
+      loaded[operand] = r;
+      return r;
+    }
+    const OPMAP = {'+':'ADD','-':'SUB','*':'MUL','/':'DIV'};
+    tac.forEach(line=>{
+      const [dest, , a, op, b] = line.split(' ');
+      if(op===undefined){ // simple assignment like "total = t2"
+        const r = regFor(a);
+        asm.push('STORE '+r+', '+dest);
+        return;
+      }
+      const ra = regFor(a);
+      const rb = regFor(b);
+      asm.push(OPMAP[op]+'   '+ra+', '+ra+', '+rb);
+      loaded[dest] = ra;
+      asm.push('STORE '+ra+', '+dest);
+    });
+
+    document.getElementById('gen-asm').textContent = asm.map((l,i)=>'  '+String(i+1).padStart(2,'0')+'   '+l).join('\n');
+
+  }catch(e){
+    errBox.textContent = '✕ '+e.message;
+    errBox.classList.add('show');
+    document.getElementById('gen-tac').innerHTML = '<span class="placeholder-msg">Corrige la expresión para generar código.</span>';
+    document.getElementById('gen-asm').innerHTML = '<span class="placeholder-msg">—</span>';
+  }
+}
+
+/* ---------------------------------------------------------- */
+/* STAGE 4: MEMORY MANAGEMENT SIMULATION                        */
+/* ---------------------------------------------------------- */
+let memTimer = null;
+
+function buildMemoryEvents(n){
+  const events = [];
+  function fase(actual){
+    events.push({type:'push', phase:actual});
+    events.push({type:'heap', phase:actual, name:'Objeto_Fase_'+actual});
+    if(actual<=1){
+      events.push({type:'base', phase:actual});
+    } else {
+      fase(actual-1);
+    }
+    events.push({type:'pop', phase:actual});
+  }
+  fase(n);
+  return events;
+}
+
+function resetMemory(){
+  if(memTimer) clearTimeout(memTimer);
+  document.getElementById('mem-log').innerHTML = '<span class="placeholder-msg">PUSH / POP y creación de objetos se listarán aquí en orden.</span>';
+  document.getElementById('mem-stack').innerHTML = '';
+  document.getElementById('mem-heap').innerHTML = '';
+  document.getElementById('mem-err').classList.remove('show');
+}
+
+function runMemory(){
+  const errBox = document.getElementById('mem-err');
+  errBox.classList.remove('show'); errBox.textContent='';
+  const raw = document.getElementById('mem-input').value;
+  const n = parseInt(raw || '3', 10);
+  if(!Number.isInteger(n) || n<1 || n>5){
+    errBox.textContent = '✕ Ingresa un número entero entre 1 y 5.';
+    errBox.classList.add('show');
+    return;
+  }
+  if(memTimer) clearTimeout(memTimer);
+
+  const events = buildMemoryEvents(n);
+  const logEl = document.getElementById('mem-log');
+  const stackEl = document.getElementById('mem-stack');
+  const heapEl = document.getElementById('mem-heap');
+  logEl.innerHTML = '';
+  stackEl.innerHTML = '';
+  heapEl.innerHTML = '';
+
+  let depth = 0;
+  let i = 0;
+
+  function appendLog(text, indent){
+    const line = document.createElement('div');
+    line.textContent = '  '.repeat(indent) + text;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function step(){
+    if(i >= events.length){
+      appendLog('FIN DE LA SIMULACION', 0);
+      return;
+    }
+    const ev = events[i++];
+    if(ev.type==='push'){
+      appendLog('→ PUSH: registro de activación (fase '+ev.phase+')', n-ev.phase);
+      const f = document.createElement('div');
+      f.className='frame'; f.id='frame-'+ev.phase;
+      f.textContent='Fase '+ev.phase+' — registro de activación';
+      stackEl.appendChild(f);
+    } else if(ev.type==='heap'){
+      appendLog('[HEAP] objeto creado: '+ev.name, n-ev.phase);
+      const h = document.createElement('div');
+      h.className='heapobj'; h.id='heap-'+ev.phase;
+      h.textContent = ev.name;
+      heapEl.appendChild(h);
+    } else if(ev.type==='base'){
+      appendLog('[control] caso base alcanzado — la pila llegó a su límite', n-ev.phase);
+    } else if(ev.type==='pop'){
+      appendLog('← POP: liberando registro (fase '+ev.phase+')', n-ev.phase);
+      const f = document.getElementById('frame-'+ev.phase);
+      if(f) f.remove();
+      const h = document.getElementById('heap-'+ev.phase);
+      if(h) h.classList.add('freed');
+    }
+    memTimer = setTimeout(step, 520);
+  }
+  step();
+}
+</script>
+</body>
+</html>
